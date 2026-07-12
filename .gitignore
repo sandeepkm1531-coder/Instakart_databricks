@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Databricks / local output
+.databricks/
+*.dbc
+
+# Data and generated outputs
+data/raw/*
+data/processed/*
+data/curated/*
+output/parquet/*
+output/predictions/*
+
+# Keep directory placeholders
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/curated/.gitkeep
+!output/parquet/.gitkeep
+!output/predictions/.gitkeep
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+

@@ -1,0 +1,10 @@
+pyspark
+databricks-sdk
+delta-spark
+mlflow
+pandas
+numpy
+scikit-learn
+matplotlib
+seaborn
+
