@@ -242,7 +242,7 @@ def ingest_dataset(dataset_name, file_name):
         raise RuntimeError(str(query.exception()))
 
     rows_processed = sum(
-        int(progress.get("numInputRows", 0))
+        int(progress.get("numInputRows") or 0)
         for progress in query.recentProgress
     )
     print(f"Completed {dataset_name}: {rows_processed:,} rows processed")
