@@ -13,7 +13,11 @@ Databricks project structure for data ingestion, cleaning, ETL transformations, 
 
 ## Data Ingestion
 
-Run `notebooks/01_Data_Ingestion.py` on Databricks after uploading raw Instakart CSV files to the configured `source_path` widget. By default, it reads from `/FileStore/instakart/raw`, writes bronze Delta tables into the Unity Catalog schema `workspace.instakart_bronze`, and records each run in `_ingestion_manifest`.
+Upload and run `notebooks/01_Bronze_Ingestion.py` in Databricks. It reads the six
+Instacart CSV files from the configured Amazon S3 source, keeps Auto Loader schema
+state and checkpoints under an explicit S3 state prefix (never public DBFS), writes
+Bronze Delta tables to `workspace.instakart_bronze`, and records each successful
+run in `_ingestion_manifest`.
 
 ## Silver cleaning
 
