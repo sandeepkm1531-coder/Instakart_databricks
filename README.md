@@ -17,7 +17,10 @@ Upload and run `notebooks/01_Bronze_Ingestion.py` in Databricks. It reads the si
 Instacart CSV files from the configured Amazon S3 source, keeps Auto Loader schema
 state and checkpoints under an explicit S3 state prefix (never public DBFS), writes
 Bronze Delta tables to `workspace.instakart_bronze`, and records each successful
-run in `_ingestion_manifest`.
+run in `_ingestion_manifest`. In addition to `orders`, it creates
+`bronze_products`, `bronze_aisles`, `bronze_departments`,
+`bronze_order_products_prior`, and `bronze_order_products_train`. Each dataset has
+an independent checkpoint and schema-state location.
 
 ## Silver cleaning
 

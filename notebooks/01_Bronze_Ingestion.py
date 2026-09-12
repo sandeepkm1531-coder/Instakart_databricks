@@ -7,7 +7,8 @@
 # MAGIC
 # MAGIC Upload this single notebook as the replacement for the old Bronze notebooks.
 # MAGIC It incrementally loads the six Instacart CSV files from Amazon S3 into
-# MAGIC Unity Catalog Delta tables with Databricks Auto Loader.
+# MAGIC Unity Catalog Delta tables with Databricks Auto Loader. The five non-order
+# MAGIC datasets use explicit `bronze_*` target names.
 # MAGIC
 # MAGIC All Auto Loader state is stored on S3. This notebook deliberately rejects
 # MAGIC `/schemas`, `/checkpoints`, `dbfs:/`, and other public-DBFS locations.
@@ -92,12 +93,36 @@ BATCH_ID = str(uuid4())
 BATCH_STARTED_AT_UTC = datetime.now(timezone.utc)
 
 DATASETS = {
-    "orders": "orders.csv",
-    "products": "products.csv",
-    "aisles": "aisles.csv",
-    "departments": "departments.csv",
-    "order_products_prior": "order_products_prior.csv",
-    "order_products_train": "order_products_train.csv",
+    "orders": {
+        "file_name": "orders.csv",
+        "target_table": "orders",
+        "state_key": "orders",
+    },
+    "products": {
+        "file_name": "products.csv",
+        "target_table": "bronze_products",
+        "state_key": "bronze_products",
+    },
+    "aisles": {
+        "file_name": "aisles.csv",
+        "target_table": "bronze_aisles",
+        "state_key": "bronze_aisles",
+    },
+    "departments": {
+        "file_name": "departments.csv",
+        "target_table": "bronze_departments",
+        "state_key": "bronze_departments",
+    },
+    "order_products_prior": {
+        "file_name": "order_products_prior.csv",
+        "target_table": "bronze_order_products_prior",
+        "state_key": "bronze_order_products_prior",
+    },
+    "order_products_train": {
+        "file_name": "order_products_train.csv",
+        "target_table": "bronze_order_products_train",
+        "state_key": "bronze_order_products_train",
+    },
 }
 
 
@@ -144,7 +169,7 @@ source_files = {
     for item in source_items
     if not item.isDir() and item.name.lower().endswith(".csv")
 }
-expected_files = set(DATASETS.values())
+expected_files = {config["file_name"] for config in DATASETS.values()}
 
 missing_files = sorted(expected_files - source_files)
 unexpected_files = sorted(source_files - expected_files)
@@ -183,11 +208,14 @@ print(f"Validated all {len(DATASETS)} files and both S3 state locations")
 
 # COMMAND ----------
 
-def ingest_dataset(dataset_name, file_name):
+def ingest_dataset(dataset_name, config):
+    file_name = config["file_name"]
+    target_table_name = config["target_table"]
+    state_key = config["state_key"]
     source_path = SOURCE_BASE_PATH
-    schema_path = f"{SCHEMA_BASE_PATH}/{dataset_name}"
-    checkpoint_path = f"{CHECKPOINT_BASE_PATH}/{dataset_name}"
-    target_table = qualified_table_name(dataset_name)
+    schema_path = f"{SCHEMA_BASE_PATH}/{state_key}"
+    checkpoint_path = f"{CHECKPOINT_BASE_PATH}/{state_key}"
+    target_table = qualified_table_name(target_table_name)
 
     # Defend against accidental path changes made through notebook widgets.
     require_s3_uri("source_path", source_path)
@@ -250,7 +278,7 @@ def ingest_dataset(dataset_name, file_name):
     return (
         dataset_name,
         file_name,
-        f"{CATALOG}.{BRONZE_SCHEMA}.{dataset_name}",
+        f"{CATALOG}.{BRONZE_SCHEMA}.{target_table_name}",
         checkpoint_path,
         rows_processed,
         "SUCCESS",
@@ -266,18 +294,18 @@ def ingest_dataset(dataset_name, file_name):
 
 result_rows = []
 
-for dataset_name, file_name in DATASETS.items():
+for dataset_name, config in DATASETS.items():
     try:
-        result_rows.append(ingest_dataset(dataset_name, file_name))
+        result_rows.append(ingest_dataset(dataset_name, config))
     except Exception as error:
         error_message = str(error)
         print(f"FAILED {dataset_name}: {error_message}")
         result_rows.append(
             (
                 dataset_name,
-                file_name,
-                f"{CATALOG}.{BRONZE_SCHEMA}.{dataset_name}",
-                f"{CHECKPOINT_BASE_PATH}/{dataset_name}",
+                config["file_name"],
+                f"{CATALOG}.{BRONZE_SCHEMA}.{config['target_table']}",
+                f"{CHECKPOINT_BASE_PATH}/{config['state_key']}",
                 None,
                 "FAILED",
                 error_message,
@@ -329,8 +357,9 @@ expected_first_load_rows = {
 }
 
 validation_rows = []
-for dataset_name in DATASETS:
-    table_df = spark.table(qualified_table_name(dataset_name))
+for dataset_name, config in DATASETS.items():
+    target_table_name = config["target_table"]
+    table_df = spark.table(qualified_table_name(target_table_name))
     actual_rows = table_df.count()
     rescued_rows = (
         table_df.filter(F.col("_rescued_data").isNotNull()).count()
@@ -339,7 +368,13 @@ for dataset_name in DATASETS:
     )
     expected_rows = expected_first_load_rows[dataset_name]
     validation_rows.append(
-        (dataset_name, actual_rows, expected_rows, actual_rows == expected_rows, rescued_rows)
+        (
+            target_table_name,
+            actual_rows,
+            expected_rows,
+            actual_rows == expected_rows,
+            rescued_rows,
+        )
     )
 
 validation_df = spark.createDataFrame(
