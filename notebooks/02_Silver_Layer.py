@@ -3,11 +3,10 @@
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC # 02B - Silver Cleaning for Product and Order-Line Data
+# MAGIC # 02 - Consolidated Silver Layer
 # MAGIC
-# MAGIC Clean the five additional Bronze datasets, enforce key relationships, and
-# MAGIC publish valid records plus quarantine tables in `instakart_silver`.
-# MAGIC Run `02_Data_Cleaning.py` first so validated Silver orders are available.
+# MAGIC Clean all six Bronze datasets in dependency order, enforce key relationships,
+# MAGIC and publish valid records plus quarantine tables in `instakart_silver`.
 
 # COMMAND ----------
 
@@ -70,6 +69,7 @@ def split_valid_and_quarantine(checked_df):
 
 
 SOURCE_TABLES = {
+    "orders": "orders",
     "aisles": "bronze_aisles",
     "departments": "bronze_departments",
     "products": "bronze_products",
@@ -82,13 +82,6 @@ for source_table in SOURCE_TABLES.values():
     if not spark.catalog.tableExists(qualified_source):
         raise ValueError(f"Required Bronze table does not exist: {qualified_source}")
 
-silver_orders_table = table_name(SILVER_SCHEMA, "orders")
-if not spark.catalog.tableExists(silver_orders_table):
-    raise ValueError(
-        f"Required Silver table does not exist: {silver_orders_table}. "
-        "Run 02_Data_Cleaning.py first."
-    )
-
 spark.sql(
     f"CREATE SCHEMA IF NOT EXISTS {quote_identifier(CATALOG)}.{quote_identifier(SILVER_SCHEMA)}"
 )
@@ -96,7 +89,70 @@ spark.sql(
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 1. Clean aisles and departments
+# MAGIC ## 1. Clean orders
+
+# COMMAND ----------
+
+bronze_orders_df = spark.table(table_name(BRONZE_SCHEMA, SOURCE_TABLES["orders"]))
+require_columns(
+    bronze_orders_df,
+    "orders",
+    [
+        "order_id",
+        "user_id",
+        "eval_set",
+        "order_number",
+        "order_dow",
+        "order_hour_of_day",
+        "days_since_prior_order",
+    ],
+)
+
+orders_typed_df = (
+    bronze_orders_df
+    .withColumn("order_id", F.col("order_id").cast("long"))
+    .withColumn("user_id", F.col("user_id").cast("long"))
+    .withColumn("eval_set", F.lower(F.trim(F.col("eval_set").cast("string"))))
+    .withColumn("order_number", F.col("order_number").cast("int"))
+    .withColumn("order_dow", F.col("order_dow").cast("int"))
+    .withColumn("order_hour_of_day", F.col("order_hour_of_day").cast("int"))
+    .withColumn("days_since_prior_order", F.col("days_since_prior_order").cast("double"))
+)
+orders_ranked_df = add_duplicate_rank(orders_typed_df, ["order_id"])
+orders_checked_df = orders_ranked_df.withColumn(
+    "_rejection_reason",
+    F.concat_ws(
+        "; ",
+        F.when(F.col("order_id").isNull() | (F.col("order_id") <= 0), "invalid order_id"),
+        F.when(F.col("user_id").isNull() | (F.col("user_id") <= 0), "invalid user_id"),
+        F.when(
+            F.col("eval_set").isNull()
+            | ~F.col("eval_set").isin("prior", "train", "test"),
+            "invalid eval_set",
+        ),
+        F.when(
+            F.col("order_number").isNull() | (F.col("order_number") <= 0),
+            "invalid order_number",
+        ),
+        F.when(
+            F.col("order_dow").isNull() | ~F.col("order_dow").between(0, 6),
+            "order_dow must be 0-6",
+        ),
+        F.when(
+            F.col("order_hour_of_day").isNull()
+            | ~F.col("order_hour_of_day").between(0, 23),
+            "order_hour_of_day must be 0-23",
+        ),
+        F.when(F.col("days_since_prior_order") < 0, "days_since_prior_order cannot be negative"),
+        F.when(F.col("_duplicate_rank") > 1, "duplicate order_id"),
+    ),
+)
+silver_orders_df, quarantine_orders_df = split_valid_and_quarantine(orders_checked_df)
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## 2. Clean aisles and departments
 
 # COMMAND ----------
 
@@ -157,7 +213,7 @@ silver_departments_df, quarantine_departments_df = split_valid_and_quarantine(
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 2. Clean products and enforce dimension references
+# MAGIC ## 3. Clean products and enforce dimension references
 
 # COMMAND ----------
 
@@ -219,11 +275,11 @@ silver_products_df, quarantine_products_df = split_valid_and_quarantine(
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 3. Clean prior and train order-product rows
+# MAGIC ## 4. Clean prior and train order-product rows
 
 # COMMAND ----------
 
-silver_order_keys_df = spark.table(silver_orders_table).select("order_id", "eval_set")
+silver_order_keys_df = silver_orders_df.select("order_id", "eval_set")
 silver_product_keys_df = silver_products_df.select("product_id").withColumn(
     "_product_exists", F.lit(True)
 )
@@ -290,11 +346,12 @@ bronze_train_df, (silver_train_df, quarantine_train_df) = clean_order_products(
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## 4. Publish Silver and quarantine tables
+# MAGIC ## 5. Publish Silver and quarantine tables
 
 # COMMAND ----------
 
 OUTPUTS = {
+    "silver_orders": (bronze_orders_df, silver_orders_df, quarantine_orders_df),
     "silver_aisles": (bronze_aisles_df, silver_aisles_df, quarantine_aisles_df),
     "silver_departments": (
         bronze_departments_df,
@@ -365,4 +422,3 @@ completion = {
 }
 print(completion)
 dbutils.notebook.exit(str(completion))
-
