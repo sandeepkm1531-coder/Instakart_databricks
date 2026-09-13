@@ -29,3 +29,13 @@ cleans all six datasets in dependency order: orders, aisles, departments,
 products, and prior/train order-product rows. It validates relationships and
 writes `silver_*` Delta tables plus a matching quarantine table for every
 dataset.
+
+## Gold analytics
+
+Run `notebooks/03_ETL_Transformations.py` after the Silver notebook. This
+single consolidated Gold notebook publishes seven dashboard-ready Delta tables
+to `workspace.instakart_gold`: executive KPIs, order-sequence trends, customer,
+product, department and aisle metrics, and day-of-week/hour shopping behavior.
+It validates required inputs, primary-key uniqueness, and Silver-to-Gold
+order-item row counts before publishing. Calendar day/week/month trends are not
+fabricated because the source Instacart dataset has no actual order date.
