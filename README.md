@@ -32,7 +32,7 @@ dataset.
 
 ## Gold analytics
 
-Run `notebooks/03_ETL_Transformations.py` after the Silver notebook. This
+Run `notebooks/03_Gold_Layer.py` after the Silver notebook. This
 single consolidated Gold notebook publishes seven dashboard-ready Delta tables
 to `workspace.instakart_gold`: executive KPIs, order-sequence trends, customer,
 product, department and aisle metrics, and day-of-week/hour shopping behavior.
