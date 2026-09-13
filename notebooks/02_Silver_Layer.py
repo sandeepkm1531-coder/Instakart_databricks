@@ -37,6 +37,12 @@ def table_name(schema, table):
     )
 
 
+def try_cast(column_name, data_type):
+    """Cast Bronze text safely so malformed values can be quarantined."""
+    quoted_column = quote_identifier(column_name)
+    return F.expr(f"try_cast({quoted_column} AS {data_type})")
+
+
 def require_columns(df, source_name, required_columns):
     missing = sorted(set(required_columns) - set(df.columns))
     if missing:
@@ -110,13 +116,13 @@ require_columns(
 
 orders_typed_df = (
     bronze_orders_df
-    .withColumn("order_id", F.col("order_id").cast("long"))
-    .withColumn("user_id", F.col("user_id").cast("long"))
+    .withColumn("order_id", try_cast("order_id", "BIGINT"))
+    .withColumn("user_id", try_cast("user_id", "BIGINT"))
     .withColumn("eval_set", F.lower(F.trim(F.col("eval_set").cast("string"))))
-    .withColumn("order_number", F.col("order_number").cast("int"))
-    .withColumn("order_dow", F.col("order_dow").cast("int"))
-    .withColumn("order_hour_of_day", F.col("order_hour_of_day").cast("int"))
-    .withColumn("days_since_prior_order", F.col("days_since_prior_order").cast("double"))
+    .withColumn("order_number", try_cast("order_number", "INT"))
+    .withColumn("order_dow", try_cast("order_dow", "INT"))
+    .withColumn("order_hour_of_day", try_cast("order_hour_of_day", "INT"))
+    .withColumn("days_since_prior_order", try_cast("days_since_prior_order", "DOUBLE"))
 )
 orders_ranked_df = add_duplicate_rank(orders_typed_df, ["order_id"])
 orders_checked_df = orders_ranked_df.withColumn(
@@ -161,7 +167,7 @@ require_columns(bronze_aisles_df, "bronze_aisles", ["aisle_id", "aisle"])
 
 aisles_typed_df = (
     bronze_aisles_df
-    .withColumn("aisle_id", F.col("aisle_id").cast("int"))
+    .withColumn("aisle_id", try_cast("aisle_id", "INT"))
     .withColumn("aisle", F.trim(F.col("aisle").cast("string")))
 )
 aisles_ranked_df = add_duplicate_rank(aisles_typed_df, ["aisle_id"])
@@ -187,7 +193,7 @@ require_columns(
 
 departments_typed_df = (
     bronze_departments_df
-    .withColumn("department_id", F.col("department_id").cast("int"))
+    .withColumn("department_id", try_cast("department_id", "INT"))
     .withColumn("department", F.trim(F.col("department").cast("string")))
 )
 departments_ranked_df = add_duplicate_rank(departments_typed_df, ["department_id"])
@@ -226,10 +232,10 @@ require_columns(
 
 products_typed_df = (
     bronze_products_df
-    .withColumn("product_id", F.col("product_id").cast("long"))
+    .withColumn("product_id", try_cast("product_id", "BIGINT"))
     .withColumn("product_name", F.trim(F.col("product_name").cast("string")))
-    .withColumn("aisle_id", F.col("aisle_id").cast("int"))
-    .withColumn("department_id", F.col("department_id").cast("int"))
+    .withColumn("aisle_id", try_cast("aisle_id", "INT"))
+    .withColumn("department_id", try_cast("department_id", "INT"))
 )
 products_ranked_df = add_duplicate_rank(products_typed_df, ["product_id"])
 
@@ -295,10 +301,10 @@ def clean_order_products(source_table, expected_eval_set):
 
     typed_df = (
         bronze_df
-        .withColumn("order_id", F.col("order_id").cast("long"))
-        .withColumn("product_id", F.col("product_id").cast("long"))
-        .withColumn("add_to_cart_order", F.col("add_to_cart_order").cast("int"))
-        .withColumn("reordered", F.col("reordered").cast("int"))
+        .withColumn("order_id", try_cast("order_id", "BIGINT"))
+        .withColumn("product_id", try_cast("product_id", "BIGINT"))
+        .withColumn("add_to_cart_order", try_cast("add_to_cart_order", "INT"))
+        .withColumn("reordered", try_cast("reordered", "INT"))
     )
     ranked_df = add_duplicate_rank(typed_df, ["order_id", "product_id"])
     order_keys_df = silver_order_keys_df.select(
