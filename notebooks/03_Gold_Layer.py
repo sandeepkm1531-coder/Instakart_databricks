@@ -80,6 +80,16 @@ def assert_unique(df, table_label, key_columns):
         )
 
 
+def assert_not_null(df, table_label, required_columns):
+    null_condition = F.lit(False)
+    for column_name in required_columns:
+        null_condition = null_condition | F.col(column_name).isNull()
+    if df.filter(null_condition).limit(1).count() > 0:
+        raise RuntimeError(
+            f"{table_label} contains nulls in required columns: {required_columns}"
+        )
+
+
 SOURCE_TABLES = {
     "orders": "silver_orders",
     "aisles": "silver_aisles",
@@ -169,7 +179,7 @@ product_dimension_df = (
         "department_id",
         F.col("d.department").alias("department_name"),
     )
-    .withColumn("_gold_processed_at_utc", F.current_timestamp())
+    .withColumn("gold_updated_at", F.current_timestamp())
 )
 
 order_fact_df = (
@@ -205,7 +215,7 @@ order_fact_df = (
         .when(F.col("order_hour_of_day") < 21, "Evening")
         .otherwise("Night"),
     )
-    .withColumn("_gold_processed_at_utc", F.current_timestamp())
+    .withColumn("gold_updated_at", F.current_timestamp())
 )
 
 order_items_df = (
@@ -240,7 +250,7 @@ order_item_fact_df = (
         "add_to_cart_order",
         "reordered",
     )
-    .withColumn("_gold_processed_at_utc", F.current_timestamp())
+    .withColumn("gold_updated_at", F.current_timestamp())
 )
 
 assert_unique(product_dimension_df, "product_dimension", ["product_id"])
@@ -266,7 +276,7 @@ if actual_item_rows != expected_item_rows:
 # COMMAND ----------
 
 item_details_df = order_item_fact_df.join(
-    product_dimension_df.drop("_gold_processed_at_utc"),
+    product_dimension_df.drop("gold_updated_at"),
     "product_id",
     "inner",
 )
@@ -307,7 +317,7 @@ gold_product_metrics_df = (
         F.round(F.avg("add_to_cart_order"), 2).alias("avg_cart_position"),
     )
     .withColumn("department_product_rank", F.row_number().over(product_rank_window))
-    .withColumn("_gold_processed_at_utc", F.current_timestamp())
+    .withColumn("gold_updated_at", F.current_timestamp())
 )
 
 user_order_metrics_df = orders_df.groupBy("user_id").agg(
@@ -371,7 +381,7 @@ gold_customer_metrics_df = (
             Window.orderBy(F.desc("total_orders"), F.asc("user_id"))
         ),
     )
-    .withColumn("_gold_processed_at_utc", F.current_timestamp())
+    .withColumn("gold_updated_at", F.current_timestamp())
 )
 
 department_total_window = Window.partitionBy()
@@ -395,7 +405,7 @@ gold_department_metrics_df = (
             4,
         ),
     )
-    .withColumn("_gold_processed_at_utc", F.current_timestamp())
+    .withColumn("gold_updated_at", F.current_timestamp())
 )
 
 aisle_total_window = Window.partitionBy()
@@ -419,7 +429,7 @@ gold_aisle_metrics_df = (
             4,
         ),
     )
-    .withColumn("_gold_processed_at_utc", F.current_timestamp())
+    .withColumn("gold_updated_at", F.current_timestamp())
 )
 
 basket_by_order_df = order_item_fact_df.groupBy("order_id").agg(
@@ -428,7 +438,7 @@ basket_by_order_df = order_item_fact_df.groupBy("order_id").agg(
 )
 
 shopping_base_df = (
-    order_fact_df.drop("_gold_processed_at_utc")
+    order_fact_df.drop("gold_updated_at")
     .join(basket_by_order_df, "order_id", "left")
     .fillna(0, subset=["basket_size", "reordered_items"])
 )
@@ -439,6 +449,9 @@ gold_shopping_behavior_df = (
     )
     .agg(
         F.countDistinct("order_id").alias("orders"),
+        F.countDistinct(
+            F.when(F.col("basket_size") > 0, F.col("order_id"))
+        ).alias("orders_with_item_detail"),
         F.countDistinct("user_id").alias("unique_customers"),
         F.sum("basket_size").alias("items_ordered"),
         F.round(
@@ -456,7 +469,7 @@ gold_shopping_behavior_df = (
             F.round(F.col("reordered_items") / F.col("items_ordered"), 4),
         ),
     )
-    .withColumn("_gold_processed_at_utc", F.current_timestamp())
+    .withColumn("gold_updated_at", F.current_timestamp())
 )
 
 orders_by_sequence_df = orders_df.groupBy(
@@ -497,7 +510,7 @@ gold_order_trends_df = (
         ),
     )
     .withColumn("trend_grain", F.lit("customer_order_sequence"))
-    .withColumn("_gold_processed_at_utc", F.current_timestamp())
+    .withColumn("gold_updated_at", F.current_timestamp())
 )
 
 order_kpis_df = orders_df.agg(
@@ -528,8 +541,81 @@ gold_kpi_summary_df = (
         "reorder_rate",
         F.round(F.col("reordered_products") / F.col("total_products_ordered"), 4),
     )
-    .withColumn("_gold_processed_at_utc", F.current_timestamp())
+    .withColumn("gold_updated_at", F.current_timestamp())
 )
+
+# Validate every published grain and reconcile additive KPIs across marts.
+if gold_kpi_summary_df.count() != 1:
+    raise RuntimeError("gold_kpi_summary must contain exactly one row")
+assert_unique(gold_order_trends_df, "gold_order_trends", ["order_sequence_number"])
+assert_unique(gold_customer_metrics_df, "gold_customer_metrics", ["user_id"])
+assert_unique(gold_product_metrics_df, "gold_product_metrics", ["product_id"])
+assert_unique(gold_department_metrics_df, "gold_department_metrics", ["department_id"])
+assert_unique(gold_aisle_metrics_df, "gold_aisle_metrics", ["aisle_id"])
+assert_unique(
+    gold_shopping_behavior_df,
+    "gold_shopping_behavior",
+    ["order_dow", "order_hour_of_day"],
+)
+
+assert_not_null(
+    gold_kpi_summary_df,
+    "gold_kpi_summary",
+    [
+        "total_orders",
+        "total_customers",
+        "total_products_ordered",
+        "average_basket_size",
+        "reorder_rate",
+    ],
+)
+assert_not_null(gold_customer_metrics_df, "gold_customer_metrics", ["user_id"])
+assert_not_null(gold_product_metrics_df, "gold_product_metrics", ["product_id"])
+assert_not_null(
+    gold_department_metrics_df, "gold_department_metrics", ["department_id"]
+)
+assert_not_null(gold_aisle_metrics_df, "gold_aisle_metrics", ["aisle_id"])
+assert_not_null(
+    gold_shopping_behavior_df,
+    "gold_shopping_behavior",
+    ["order_dow", "order_hour_of_day", "orders", "items_ordered"],
+)
+
+product_reconciliation_df = gold_product_metrics_df.agg(
+    F.sum("items_ordered").alias("product_items"),
+    F.sum("reordered_items").alias("product_reordered_items"),
+    F.count("product_id").alias("products_purchased"),
+)
+department_reconciliation_df = gold_department_metrics_df.agg(
+    F.sum("items_ordered").alias("department_items")
+)
+aisle_reconciliation_df = gold_aisle_metrics_df.agg(
+    F.sum("items_ordered").alias("aisle_items")
+)
+shopping_reconciliation_df = gold_shopping_behavior_df.agg(
+    F.sum("items_ordered").alias("shopping_items")
+)
+
+kpi_reconciliation_failed = (
+    gold_kpi_summary_df
+    .crossJoin(product_reconciliation_df)
+    .crossJoin(department_reconciliation_df)
+    .crossJoin(aisle_reconciliation_df)
+    .crossJoin(shopping_reconciliation_df)
+    .filter(
+        (F.col("total_products_ordered") != F.col("product_items"))
+        | (F.col("total_products_ordered") != F.col("department_items"))
+        | (F.col("total_products_ordered") != F.col("aisle_items"))
+        | (F.col("total_products_ordered") != F.col("shopping_items"))
+        | (F.col("reordered_products") != F.col("product_reordered_items"))
+        | (F.col("unique_products_purchased") != F.col("products_purchased"))
+    )
+    .limit(1)
+    .count()
+    > 0
+)
+if kpi_reconciliation_failed:
+    raise RuntimeError("Gold KPI reconciliation failed across one or more marts")
 
 # COMMAND ----------
 
@@ -591,7 +677,7 @@ display(summary_df.orderBy("dataset"))
 # MAGIC static Instacart dataset and guarantees repeatable results. For production
 # MAGIC append-only data, preserve these table grains but incrementally `MERGE` facts,
 # MAGIC recompute affected aggregate keys, and orchestrate Bronze -> Silver -> Gold in
-# MAGIC a Databricks Workflow. All outputs include `_gold_processed_at_utc` for freshness.
+# MAGIC a Databricks Workflow. All outputs include `gold_updated_at` for freshness.
 
 completion = {
     "status": "SUCCESS",

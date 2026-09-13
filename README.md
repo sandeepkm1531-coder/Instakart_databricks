@@ -39,3 +39,7 @@ product, department and aisle metrics, and day-of-week/hour shopping behavior.
 It validates required inputs, primary-key uniqueness, and Silver-to-Gold
 order-item row counts before publishing. Calendar day/week/month trends are not
 fabricated because the source Instacart dataset has no actual order date.
+
+The Power BI semantic-model setup, DAX measures, four-page visual specification,
+and reconciliation checklist are documented in
+`docs/powerbi_dashboard_guide.md`.
