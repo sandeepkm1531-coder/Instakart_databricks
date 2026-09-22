@@ -1,5 +1,11 @@
 # Instacart Gold - Power BI Dashboard Build Guide
 
+## Status: alternative dashboard design
+
+The implemented project dashboard uses Google Sheets and Looker Studio.
+See [Looker Studio dashboard notes](looker_studio_dashboard.md). This Power BI
+guide is retained as an earlier alternative design.
+
 ## Scope and metric rules
 
 The report has four pages: Executive Overview, Customer Behaviour, Product
