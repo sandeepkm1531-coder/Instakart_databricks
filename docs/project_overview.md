@@ -1,8 +1,14 @@
-# Project Overview
+# Instacart End-to-End Analytics, Machine Learning and RAG Assistant
 
-This project processes Instacart grocery-order data through Databricks Bronze,
-Silver, and Gold layers. Gold results are exported to Google Sheets for a Looker
-Studio dashboard. A RAG assistant adds explanations of the metrics and dataset.
+This project takes raw shopping data, prepares reliable reporting tables,
+visualizes business patterns, and makes selected information accessible through
+an AI assistant—with a separate machine-learning experiment.
+
+Databricks Bronze, Silver, and Gold layers process the grocery-order data. Gold
+results are exported to Google Sheets for a Looker Studio dashboard. The RAG
+assistant explains selected metrics and dataset knowledge. The separate ML
+experiment estimates historical shopping patterns and includes hyperparameter
+tuning; it is not part of the assistant's retrieval workflow.
 
 ## Implemented workflow
 

@@ -1,6 +1,13 @@
-# Instakart_databricks
+# Instacart End-to-End Analytics, Machine Learning and RAG Assistant
 
-Instacart analytics project using Databricks Bronze, Silver, and Gold layers, Google Sheets, a Looker Studio dashboard, and a RAG assistant for explaining the analytics.
+This project takes raw shopping data, prepares reliable reporting tables,
+visualizes business patterns, and makes selected information accessible through
+an AI assistant—with a separate machine-learning experiment.
+
+Databricks Bronze, Silver, and Gold layers prepare the data. Google Sheets and
+Looker Studio support reporting, while the RAG assistant explains selected
+analytics knowledge. A separate ML notebook models historical shopping patterns
+and compares models with optional hyperparameter tuning.
 
 ## Current progress
 
