@@ -25,8 +25,24 @@ See the [project overview](docs/project_overview.md),
 [Looker Studio dashboard notes](docs/looker_studio_dashboard.md), and
 [RAG assistant notes](docs/rag_assistant.md).
 The dashboard and assistant currently live outside this repository; the assistant
-notebook and live dashboard URL have not yet been added. The numbered analytics
-and machine-learning files remain scaffolding, not evidence of completed models.
+notebook and live dashboard URL have not yet been added. Notebooks 04–09 remain
+scaffolding; the completed ML experiment is in notebook 10 below.
+
+## Machine learning and hyperparameter tuning
+
+Open [10_Gold_ML_Hyperparameter_Tuning.ipynb](notebooks/10_Gold_ML_Hyperparameter_Tuning.ipynb)
+in [Google Colab](https://colab.research.google.com/github/sandeepkm1531-coder/Instakart_databricks/blob/main/notebooks/10_Gold_ML_Hyperparameter_Tuning.ipynb).
+Paste the Google Sheet URL and select the `shopping-behavior` worksheet. Public
+Sheets work without credentials; private Sheets support sign-in, and Excel/CSV
+upload is also available. Set `RUN_TUNING` to enable or skip hyperparameter search.
+
+The completed run compares a mean baseline, Ridge regression, and Random Forest
+on 168 historical day/hour aggregates. The tuned Random Forest achieved test MAE
+2,392.95, RMSE 2,910.44, R² 0.9574, and WAPE 8.90% on 35 held-out rows.
+These measure historical pattern estimation, not future forecasting.
+
+The [saved run](output/ml/README.md) includes the trained model, prediction helper,
+package versions, tuning trials, evaluation split, and metrics.
 
 ## Project Structure
 

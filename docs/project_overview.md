@@ -23,8 +23,10 @@ The repository contains the Databricks pipeline source and documentation.
 The live Google Sheet, Looker Studio report, and executable RAG notebook are
 external artifacts and are not included here. The RAG document describes a build
 approach; it does not by itself establish the exact final deployed implementation.
-The analytics and machine-learning scaffolding does not establish completed
-training, evaluation, or prediction runs.
+Notebooks 04–09 remain scaffolding. Notebook 10 now contains a completed Colab ML
+experiment with optional hyperparameter tuning over the shopping-behavior Gold
+aggregates. Its [saved model and evaluation](../output/ml/README.md) are included.
+This is historical pattern estimation, not a dated forecasting experiment.
 
 See [Looker Studio dashboard](looker_studio_dashboard.md) and
 [RAG assistant](rag_assistant.md) for details. The existing
