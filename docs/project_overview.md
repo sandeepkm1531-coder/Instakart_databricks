@@ -1,4 +1,4 @@
-# Instacart End-to-End Analytics, Machine Learning and RAG Assistant
+# Instacart Analytics with Databricks Medallion Architecture, Machine Learning and RAG Assistant
 
 This project takes raw shopping data, prepares reliable reporting tables,
 visualizes business patterns, and makes selected information accessible through
